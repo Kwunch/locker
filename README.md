@@ -1,5 +1,7 @@
 # locker
-Rust Encryption / Decryption Program For Personal Use
+Rust Encryption
+
+Rust Encryption and Decryption Program For Personal Use
 
 Usage: locker [encrypt || decrypt] [path] [key path] [nonce path]
 
