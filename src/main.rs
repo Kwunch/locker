@@ -157,7 +157,7 @@ fn decrypt_file(path: &Path, key: &[u8; 32],
 
         println!("Decrypted File: {}", path.display());
 
-        fs::write(path, decrypted).expect("Error Writing Encrypted Contents");
+        fs::write(path, decrypted).expect("Error Writing Decrypted Contents");
 
         Ok(())
 }
